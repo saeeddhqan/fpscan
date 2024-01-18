@@ -129,7 +129,7 @@ def show(x, y, x_title, y_title, name, title):
 	plt.xlabel(x_title)
 	plt.ylabel(y_title)
 	plt.savefig(name + '.png')
-	plt.show()
+	# plt.show()
 
 def plot_vs(x):
 	for method in ('seqlen', 'dim'):
@@ -142,15 +142,15 @@ def plot_vs(x):
 		plt.xlabel(method)
 		plt.ylabel('duration')
 		plt.savefig('vg_seqlen.png')
-		plt.show()
+		# plt.show()
 
 if __name__ == "__main__":
 	import time, sys
 
 	B, G, T, D = 16, 4, 128, 32
 	steps = 100
-	vanilla = False
-	seq_test = False
+	vanilla = True
+	seq_test = True
 	slen = slen = [2**x for x in range(4, 10)] + [512*x for x in range(2, 22)] + [1024*x for x in range(11, 16)] + [4096*x for x in range(4, 9)]
 	slen_g = [x/16 for x in slen[:-5]] + [x/32 for x in slen[-5:]]
 	dlen = length = [128*x for x in range(1, 17)]
