@@ -131,31 +131,31 @@ def show(x, y, x_title, y_title, name, title):
 	plt.savefig(name + '.png')
 	# plt.show()
 
-def plot_vs(x):
-	for method in ('seqlen', 'dim'):
-		y0_mean = torch.load(f'vanilla_{method}_mean.pt')
-		y1_mean = torch.load(f'grouped_{method}_mean.pt')
-		plt.plot(x[method], y0_mean, linestyle='-', label='vanilla')
-		plt.plot(x[method], y1_mean, linestyle='-', label='grouped')
-		plt.legend()
-		plt.title('vanilla versus grouped')
-		plt.xlabel(method)
-		plt.ylabel('duration')
-		plt.savefig('vg_seqlen.png')
-		# plt.show()
+def plot_vs(x, method):
+	y0_mean = torch.load(f'vanilla_{method}_mean.pt')
+	y1_mean = torch.load(f'grouped_{method}_mean.pt')
+	plt.plot(x[method], y0_mean, linestyle='-', label='vanilla')
+	plt.plot(x[method], y1_mean, linestyle='-', label='grouped')
+	plt.legend()
+	plt.title('vanilla versus grouped')
+	plt.xlabel(method)
+	plt.ylabel('duration')
+	plt.savefig(f'vg_{method}.png')
+	plt.clf()
 
 if __name__ == "__main__":
 	import time, sys
 
-	B, G, T, D = 16, 4, 128, 32
+	B, G, T, D = 8, 8, 256, 32
 	steps = 100
-	vanilla = True
-	seq_test = True
+	vanilla = False
+	seq_test = False
 	slen = slen = [2**x for x in range(4, 10)] + [512*x for x in range(2, 22)] + [1024*x for x in range(11, 16)] + [4096*x for x in range(4, 9)]
 	slen_g = [x/16 for x in slen[:-5]] + [x/32 for x in slen[-5:]]
 	dlen = length = [128*x for x in range(1, 17)]
 
-	# plot_vs({'seqlen': slen, 'dim': dlen})
+	# plot_vs({'seqlen': slen, 'dim': dlen}, 'seqlen')
+	# plot_vs({'seqlen': slen, 'dim': dlen}, 'dim')
 	# exit()
 
 	metric = slen if seq_test else dlen
@@ -164,10 +164,12 @@ if __name__ == "__main__":
 	dlen_mean = []
 	dlen_std = []
 
-	for i in metric:
+	for k,i in enumerate(metric):
 		timing = torch.empty(10)
 		T = i if seq_test else T
 		D = i if not seq_test else D
+		if seq_test:
+		   G = int(slen_g[k])
 
 		for r in range(timing.size(0)):
 			A = 0.9 + 0.1 * torch.rand(B, T, dtype=torch.float64).to('cuda').requires_grad_()
