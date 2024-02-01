@@ -74,7 +74,6 @@ class LongConv(nn.Module):
 		self.kernel_lam = kernel_lam
 
 		self.D = nn.Parameter(torch.randn(channels, self.H))
-		self.activation = F.silu()
 
 		self.output_linear = nn.Sequential(
 			nn.Linear(self.channels * self.H, 2 * self.H, bias=True),
@@ -101,7 +100,7 @@ class LongConv(nn.Module):
 		# Reshape to flatten channels
 		y = rearrange(y, '... c h l -> ... (c h) l')
 
-		y = self.activation(y)
+		y = F.silu(y)
 
 		# Transpose for the linear
 		y = y.transpose(-1, -2)
