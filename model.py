@@ -280,6 +280,7 @@ class MambaBlock(nn.Module):
 		# 	dim=(-1, -2)).real
 		# )
 		# return (y, None)
+		print(latent.view(b, self.ng, self.warp, d_in, n)[:, :, -1].view(b, -1, d_in * n).to(torch.bfloat16).shape)
 		return (y,
 			self.second_mixing(
 				latent.view(b, self.ng, self.warp, d_in, n)[:, :, -1].view(b, -1, d_in * n).to(torch.bfloat16)
