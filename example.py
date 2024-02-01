@@ -71,7 +71,7 @@ class LongConv(OurModule):
 		# squash operator
 		k = F.relu(torch.abs(k)-self.kernel_lam)*torch.sign(k)
 		k = self.kernel_drop(k)
-		
+		print(k.shape)
 		# use FFT to compute convolution
 		y = self.flashfftconv(u.contiguous(), k.squeeze(0))
 		y = y.unsqueeze(1)
@@ -107,7 +107,7 @@ class LongConvModel(nn.Module):
 
 		self.encoder = nn.Linear(d_input, d_model)
 
-		self.flashfftconv = FlashFFTConv(2048, dtype=torch.bfloat16)
+		self.flashfftconv = FlashFFTConv(1024, dtype=torch.bfloat16)
 
 		self.layer = LongConv(d_model, L=1024, dropout=dropout, **conv_kwargs)
 		self.layer.flashfftconv = self.flashfftconv
