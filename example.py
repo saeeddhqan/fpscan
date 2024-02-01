@@ -107,7 +107,7 @@ class LongConvModel(nn.Module):
 
 		self.encoder = nn.Linear(d_input, d_model)
 
-		self.flashfftconv = FlashFFTConv(1024, dtype=torch.bfloat16)
+		self.flashfftconv = FlashFFTConv(2048, dtype=torch.bfloat16)
 
 		self.layer = LongConv(d_model, L=1024, dropout=dropout, **conv_kwargs)
 		self.layer.flashfftconv = self.flashfftconv
@@ -130,6 +130,6 @@ class LongConvModel(nn.Module):
 		return x
 
 
-model = LongConvModel(128).to('cuda')
-x = torch.rand(4, 2048, 128).to('cuda').to(torch.bfloat16)
+model = LongConvModel(256).to('cuda')
+x = torch.rand(4, 2048, 256).to('cuda').to(torch.bfloat16)
 print(model(x).shape)
