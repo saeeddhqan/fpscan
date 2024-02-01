@@ -26,7 +26,7 @@ results = PrettyTable()
 results.field_names = ['B', 'L', 'D', 'torch time (ms)', 'cuda time (ms)', 'speedup', 'Effective bandwidth (GB/s)']
 
 for b in [2]:
-	for l in [1024, 2048, 4096, 8192, 32768]:
+	for l in [4096, 8192, 32768]:
 		for d in [128, 256]:
 			x = torch.randn([b, l, d])
 			model.config.dim = d
