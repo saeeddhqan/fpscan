@@ -150,28 +150,28 @@ class MambaBlock(nn.Module):
 		deltaA = torch.exp(einsum(delta, A, 'b l d_in, d_in n -> b l d_in n'))
 		deltaB_u = einsum(delta, B, u, 'b l d_in, b l n, b l d_in -> b l d_in n')
 
-		if self.idx > 0:
-			deltaB_u = deltaB_u.view(b, self.ng, self.warp, d_in, n)
+		# if self.idx > 0:
+		# 	deltaB_u = deltaB_u.view(b, self.ng, self.warp, d_in, n)
 
-			deltaB_u = torch.cat(
-				(deltaB_u[:, :1],
-				torch.cat(
-					((deltaB_u[:, 1:, 0] + (deltaA[:, self.ngs[1:]] * latent[:, :-1])).unsqueeze(2),
-					deltaB_u[:, 1:, 1:]), dim=2)
-				),
-			dim=1).view(b, self.ng * self.warp, d_in, n)
+		# 	deltaB_u = torch.cat(
+		# 		(deltaB_u[:, :1],
+		# 		torch.cat(
+		# 			((deltaB_u[:, 1:, 0] + (deltaA[:, self.ngs[1:]] * latent[:, :-1])).unsqueeze(2),
+		# 			deltaB_u[:, 1:, 1:]), dim=2)
+		# 		),
+		# 	dim=1).view(b, self.ng * self.warp, d_in, n)
 
 
 		latent = pscan2(deltaA, deltaB_u)
 
 		y = (latent @ C.unsqueeze(-1)).squeeze().view(b, l, d_in) + u * D
 
-		return (y,
-			torch.fft.fft2(
-				latent.view(b, self.ng, self.warp, d_in, n)[:, :, -1].float(),
-			dim=(-1, -2)).real
-		)
-
+		# return (y,
+		# 	torch.fft.fft2(
+		# 		latent.view(b, self.ng, self.warp, d_in, n)[:, :, -1].float(),
+		# 	dim=(-1, -2)).real
+		# )
+		return (y, None)
 
 class Block(nn.Module):
 	def __init__(self, idx):
