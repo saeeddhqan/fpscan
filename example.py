@@ -109,8 +109,8 @@ class LongConvModel(nn.Module):
 
 		self.flashfftconv = FlashFFTConv(2048, dtype=torch.bfloat16)
 
-		layer = LongConv(d_model, L=1024, dropout=dropout, **conv_kwargs)
-		layer.flashfftconv = self.flashfftconv
+		self.layer = LongConv(d_model, L=1024, dropout=dropout, **conv_kwargs)
+		self.layer.flashfftconv = self.flashfftconv
 
 
 		# Linear decoder
@@ -123,7 +123,7 @@ class LongConvModel(nn.Module):
 		x_type = x.dtype
 
 		x = x.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
-		z = layer(x)
+		z = self.layer(x)
 		x = z + x
 		x = x.transpose(-1, -2)
 
