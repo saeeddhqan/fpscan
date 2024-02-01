@@ -5,13 +5,13 @@
 #include <torch/extension.h>
 
 template <typename tens>
-__global__ __forceinline__ __launch_bounds__(384, 32)
+__global__ __forceinline__ __launch_bounds__(512, 32)
 void scan(
 	tens* __restrict__ A,
 	tens* __restrict__ B
 ) {
 
-	const unsigned int id = (blockIdx.x * 384) + threadIdx.x;
+	const unsigned int id = (blockIdx.x * 512) + threadIdx.x;
 	const unsigned int lane_id = id % 32;
 	tens value = B[id];
 	tens gate = A[id];
@@ -38,7 +38,7 @@ void myscan(const at::Tensor &Ax, const at::Tensor &Bx) {
 	const unsigned int batch = sizes[0];
 	const auto strides = Bx.strides();
 	const unsigned int batch_stride = strides[0];
-	constexpr unsigned int block_size = 384;
+	constexpr unsigned int block_size = 512;
 	const unsigned int grid_size = (batch_stride * batch) / block_size;
 
 	scan<tens><<<grid_size, block_size, 0, stream>>>(
