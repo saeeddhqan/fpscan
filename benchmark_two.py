@@ -50,13 +50,13 @@ def set_repeats(seqlen):
 
 save_filename = 'benchmark_results.csv'
 
-B = 64
-H = 768
+B = 8
+H = 256
 total_seqs = B * H
 dtype = torch.float32
 device = 'cuda'
 # seqlens = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 32 * 32768, 64 * 32768, 128 * 32768]
-seqlens = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 32 * 32768]
+seqlens = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
 benchmark_fns = ['forward', 'backward', 'memory']
 benchmark_fn_mapping = {
@@ -85,13 +85,12 @@ for benchmark_fn_name in benchmark_fns:
 	for seqlen in tqdm(seqlens):
 		N = seqlen
 
-		local_B, local_H = set_B_H(B, H, seqlen)
 		repeats = set_repeats(seqlen)
 		
-		adjustment = total_seqs / (local_B * local_H)
+		adjustment = total_seqs / (B * H)
 
-		u = torch.randn(local_B, N, local_H, dtype=dtype).to(device)
-		model.config.dim = local_H
+		u = torch.randn(B, N, H, dtype=dtype).to(device)
+		model.config.dim = H
 
 		model.config.group = False
 		model.config.ngroups = seqlen // 32
@@ -111,13 +110,12 @@ for benchmark_fn_name in benchmark_fns:
 	for seqlen in tqdm(seqlens):
 		N = seqlen
 
-		local_B, local_H = set_B_H(B, H, seqlen)
 		repeats = set_repeats(seqlen)
 		
-		adjustment = total_seqs / (local_B * local_H)
+		adjustment = total_seqs / (B * H)
 
-		u = torch.randn(local_B, N, local_H, dtype=dtype).to(device)
-		model.config.dim = local_H
+		u = torch.randn(B, N, H, dtype=dtype).to(device)
+		model.config.dim = H
 
 		model.config.group = False
 		mamba1 = model.Model().to(device)

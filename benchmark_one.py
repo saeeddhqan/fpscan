@@ -27,7 +27,7 @@ results.field_names = ['B', 'L', 'D', 'torch time (ms)', 'cuda time (ms)', 'spee
 
 for b in [16]:
 	for l in [1024, 2048, 4096, 8192]:
-		for d in [768, 1024, 2048, 8192]:
+		for d in [768, 1024, 2048, 256]:
 			x = torch.randn([b, l, d])
 			model.config.dim = d
 
