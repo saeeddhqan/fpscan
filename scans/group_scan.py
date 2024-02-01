@@ -26,8 +26,8 @@ myscan_forward = myscan.myscan_forward
 
 
 class PScan(torch.autograd.Function):
-	@staticmethod
-	def pscan(A, X):
+	# @staticmethod
+	# def pscan(A, X):
 
 		# return out.mT.transpose(2, 1)
 
