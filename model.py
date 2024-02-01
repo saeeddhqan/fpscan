@@ -149,7 +149,7 @@ class LongConvModel(nn.Module):
 
 		self.flashfftconv = FlashFFTConv(config.ngroups * 2, dtype=torch.bfloat16)
 
-		self.layer = LongConv(config.dim, L=config.ngroups, dropout=dropout, **conv_kwargs)
+		self.layer = LongConv(d_model, L=config.ngroups, dropout=dropout, **conv_kwargs)
 		self.layer.flashfftconv = self.flashfftconv
 
 
@@ -185,7 +185,7 @@ class MambaBlock(nn.Module):
 		A = repeat(torch.arange(1, self.d_state + 1), 'n -> d n', d=self.d_in)
 		self.A_log = nn.Parameter(torch.log(A))
 		self.D = nn.Parameter(torch.ones(self.d_in))
-
+		print(self.d_in * self.d_state)
 		if config.group:
 			self.warp = config.warp
 			self.ng = config.ngroups
