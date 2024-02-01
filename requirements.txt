@@ -1,3 +1,7 @@
 numpy
 torch
 matplotlib
+tabulate
+tqdm
+einops
+prettytable
