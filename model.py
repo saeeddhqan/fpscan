@@ -71,7 +71,6 @@ class LongConv(nn.Module):
 		self.H = H
 		self.L = L * 2
 		self.channels = channels
-		self.kernel_learning_rate = kernel_learning_rate
 		self.kernel_lam = kernel_lam
 
 		self.D = nn.Parameter(torch.randn(channels, self.H))
