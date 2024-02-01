@@ -50,7 +50,7 @@ def set_repeats(seqlen):
 
 save_filename = 'benchmark_results.csv'
 
-B = 8
+B = 4
 H = 256
 total_seqs = B * H
 dtype = torch.float32
@@ -162,13 +162,13 @@ with open(save_filename, 'w') as f:
 
 print(tabulate(table))
 
-if write_tex:
-	for k in keys:
-		header = [['\\textbf{Seq Len}', '\\textbf{PyTorch}', '\\textbf{\\sysname}', '\\textbf{Memory Reduction}' if 'memory' in k[1] else '\\textbf{Speedup}']]
-		table_data = header + [
-			['\\textbf{' + str(seqlen) + '}', '%1.2f' % ref_vals[k][i], '%1.2f' % contraction_vals[k][i], '%1.2f$\\times$' % savings_vals[k][i]]
-			for i, seqlen in enumerate(seqlens)
-		]
-		latex_table = tabulate(table_data, tablefmt='latex_raw')
-		print(f'{k[0]}, {k[1]}, LaTex')
-		print(latex_table)
+# if write_tex:
+# 	for k in keys:
+# 		header = [['\\textbf{Seq Len}', '\\textbf{PyTorch}', '\\textbf{\\sysname}', '\\textbf{Memory Reduction}' if 'memory' in k[1] else '\\textbf{Speedup}']]
+# 		table_data = header + [
+# 			['\\textbf{' + str(seqlen) + '}', '%1.2f' % ref_vals[k][i], '%1.2f' % contraction_vals[k][i], '%1.2f$\\times$' % savings_vals[k][i]]
+# 			for i, seqlen in enumerate(seqlens)
+# 		]
+# 		latex_table = tabulate(table_data, tablefmt='latex_raw')
+# 		print(f'{k[0]}, {k[1]}, LaTex')
+# 		print(latex_table)
