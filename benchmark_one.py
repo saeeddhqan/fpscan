@@ -30,6 +30,7 @@ for b in [2]:
 		for d in [128, 256]:
 			x = torch.randn([b, l, d])
 			model.config.dim = d
+			model.config.block_size = l
 
 			model.config.group = False
 			vanilla_mamba = model.Model()
