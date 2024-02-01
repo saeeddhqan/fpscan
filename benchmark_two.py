@@ -130,7 +130,7 @@ for benchmark_fn_name in benchmark_fns:
 			m = benchmark_fn(mamba1, u, desc=f"Mamba, {seqlen}", verbose=False)
 			ref.append(m * adjustment)
 
-		savings = [ c / r for r, c in zip(ref, contraction)]
+		savings = [ r / c for r, c in zip(ref, contraction)]
 
 	print('Contraction', contraction)
 	print('Ref', ref)
