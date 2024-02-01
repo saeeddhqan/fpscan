@@ -28,15 +28,14 @@ myscan_forward = myscan.myscan_forward
 class PScan(torch.autograd.Function):
 	@staticmethod
 	def pscan(A, X):
-		out = myscan_forward(
+		myscan_forward(
 			A.mT.contiguous(),
 			X.mT.contiguous(),
 		)
-		return out.mT.transpose(2, 1)
+		# return out.mT.transpose(2, 1)
 
 	@staticmethod
 	def forward(ctx, A_in, X_in):
-		A_in = A_in.to(X_in.dtype)
 
 		A = A_in.clone()
 		X = X_in.clone()
@@ -44,9 +43,11 @@ class PScan(torch.autograd.Function):
 		A = A.transpose(2, 1)
 		X = X.transpose(2, 1)
 
-		PScan.pscan(A, X)
-
-		ctx.save_for_backward(A_in, X)
+		myscan_forward(
+			A.mT.contiguous(),
+			X.mT.contiguous(),
+		)
+		# ctx.save_for_backward(A_in, X)
 
 		return X.transpose(2, 1)
 	
