@@ -75,7 +75,7 @@ keys = []
 
 for benchmark_fn_name in benchmark_fns:
 	torch.cuda.empty_cache()
-	print(f'Benchmarking {benchmark_fn_name} for {func} with seqlens {seqlens}')
+	print(f'Benchmarking {benchmark_fn_name} with seqlens {seqlens}')
 
 	ref = []
 	contraction = []
@@ -137,10 +137,10 @@ for benchmark_fn_name in benchmark_fns:
 	print('Contraction', contraction)
 	print('Ref', ref)
 	print('Savings', savings)
-	contraction_vals[(func, benchmark_fn_name)] = contraction
-	ref_vals[(func, benchmark_fn_name)] = ref
-	savings_vals[(func, benchmark_fn_name)] = savings
-	keys.append((func, benchmark_fn_name))
+	contraction_vals[benchmark_fn_name] = contraction
+	ref_vals[benchmark_fn_name] = ref
+	savings_vals[benchmark_fn_name] = savings
+	keys.append(benchmark_fn_name)
 
 print('Seqlens:', seqlens)
 print('Contraction:', contraction_vals)
