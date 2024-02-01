@@ -30,6 +30,7 @@ class ConfigMamba:
 	ngroups = 8
 	dropout = 0.1
 	warp = 16
+	block_size = 0
 
 	def __post_init__(self):
 		self.d_inner = int(self.expand * self.dim)
@@ -196,7 +197,7 @@ class MambaBlock(nn.Module):
 			self.ng = config.ngroups
 			self.ngs = [x * self.warp for x in range(self.ng)]
 			self.hot_loop = self.group_block
-			self.second_mixing = LongConvModel(self.dim)
+			self.second_mixing = LongConvModel(self.dim, d_model=self.dim)
 		else:
 			self.hot_loop = self.vanilla_block_parallel
 
