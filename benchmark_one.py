@@ -35,7 +35,7 @@ for b in [8]:
 			vanilla_mamba = model.Model()
 
 			model.config.group = True
-			model.config.ngroups = l // 32
+			model.config.ngroups = l // 16
 			contract_mamba = model.Model()
 
 			#warmup

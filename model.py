@@ -26,7 +26,7 @@ class ConfigMamba:
 	group = False
 	ngroups = 8
 	dropout = 0.1
-
+	warp = 16
 
 	def __post_init__(self):
 		self.d_inner = int(self.expand * self.dim)
@@ -80,8 +80,9 @@ class MambaBlock(nn.Module):
 		self.D = nn.Parameter(torch.ones(self.d_in))
 
 		if config.group:
+			self.warp = config.warp_size
 			self.ng = config.ngroups
-			self.ngs = [x * 32 for x in range(self.ng)]
+			self.ngs = [x * self.warp for x in range(self.ng)]
 			self.hot_loop = self.group_block
 		else:
 			self.hot_loop = self.vanilla_block_parallel
@@ -150,7 +151,7 @@ class MambaBlock(nn.Module):
 		deltaB_u = einsum(delta, B, u, 'b l d_in, b l n, b l d_in -> b l d_in n')
 
 		if self.idx > 0:
-			deltaB_u = deltaB_u.view(b, self.ng, 32, d_in, n)
+			deltaB_u = deltaB_u.view(b, self.ng, self.warp, d_in, n)
 
 			deltaB_u = torch.cat(
 				(deltaB_u[:, :1],
@@ -158,7 +159,7 @@ class MambaBlock(nn.Module):
 					((deltaB_u[:, 1:, 0] + (deltaA[:, self.ngs[1:]] * latent[:, :-1])).unsqueeze(2),
 					deltaB_u[:, 1:, 1:]), dim=2)
 				),
-			dim=1).view(b, self.ng * 32, d_in, n)
+			dim=1).view(b, self.ng * self.warp, d_in, n)
 
 
 		latent = pscan2(deltaA, deltaB_u)
@@ -167,7 +168,7 @@ class MambaBlock(nn.Module):
 
 		return (y,
 			torch.fft.fft2(
-				latent.view(b, l // 32, 32, d_in, n)[:, :, -1].float(),
+				latent.view(b, self.ng, self.warp, d_in, n)[:, :, -1].float(),
 			dim=(-1, -2)).real
 		)
 

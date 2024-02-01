@@ -93,7 +93,7 @@ for benchmark_fn_name in benchmark_fns:
 		model.config.dim = H
 
 		model.config.group = False
-		model.config.ngroups = seqlen // 32
+		model.config.ngroups = seqlen // 16
 		mamba2 = model.Model().to(device)
 		benchmark_fn = benchmark_fn_mapping[benchmark_fn_name]
 

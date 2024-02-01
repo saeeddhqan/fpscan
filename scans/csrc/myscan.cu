@@ -5,21 +5,21 @@
 #include <torch/extension.h>
 
 template <typename tens>
-__global__ __forceinline__ __launch_bounds__(512, 32)
+__global__ __forceinline__ __launch_bounds__(256, 16)
 void scan(
 	tens* __restrict__ A,
 	tens* __restrict__ B
 ) {
 
-	const unsigned int id = (blockIdx.x * 512) + threadIdx.x;
-	const unsigned int lane_id = id % 32;
+	const unsigned int id = (blockIdx.x * 256) + threadIdx.x;
+	const unsigned int lane_id = id % 16;
 	tens value = B[id];
 	tens gate = A[id];
 
 	#pragma unroll
-	for (unsigned int i = 1; i <= 32; i *= 2) {
-		tens n = __shfl_up_sync(0xffffffff, value, i, 32);
-		tens g = __shfl_up_sync(0xffffffff, gate, i, 32);
+	for (unsigned int i = 1; i <= 16; i *= 2) {
+		tens n = __shfl_up_sync(0xffffffff, value, i, 16);
+		tens g = __shfl_up_sync(0xffffffff, gate, i, 16);
 		if (lane_id >= i) {
 			value += gate * n;
 			gate *= g;
@@ -38,7 +38,7 @@ void myscan(const at::Tensor &Ax, const at::Tensor &Bx) {
 	const unsigned int batch = sizes[0];
 	const auto strides = Bx.strides();
 	const unsigned int batch_stride = strides[0];
-	constexpr unsigned int block_size = 512;
+	constexpr unsigned int block_size = 256;
 	const unsigned int grid_size = (batch_stride * batch) / block_size;
 
 	scan<tens><<<grid_size, block_size, 0, stream>>>(
