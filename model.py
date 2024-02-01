@@ -147,9 +147,9 @@ class LongConvModel(nn.Module):
 	):
 		super().__init__()
 
-		self.flashfftconv = FlashFFTConv(config.block_size * 2, dtype=torch.bfloat16)
+		self.flashfftconv = FlashFFTConv(config.ngroups * 2, dtype=torch.bfloat16)
 
-		self.layer = LongConv(config.dim, L=config.block_size, dropout=dropout, **conv_kwargs)
+		self.layer = LongConv(config.dim, L=config.ngroups, dropout=dropout, **conv_kwargs)
 		self.layer.flashfftconv = self.flashfftconv
 
 
@@ -258,16 +258,16 @@ class MambaBlock(nn.Module):
 		deltaA = torch.exp(einsum(delta, A, 'b l d_in, d_in n -> b l d_in n'))
 		deltaB_u = einsum(delta, B, u, 'b l d_in, b l n, b l d_in -> b l d_in n')
 
-		# if self.idx > 0:
-		# 	deltaB_u = deltaB_u.view(b, self.ng, self.warp, d_in, n)
+		if self.idx > 0:
+			deltaB_u = deltaB_u.view(b, self.ng, self.warp, d_in, n)
 
-		# 	deltaB_u = torch.cat(
-		# 		(deltaB_u[:, :1],
-		# 		torch.cat(
-		# 			((deltaB_u[:, 1:, 0] + (deltaA[:, self.ngs[1:]] * latent[:, :-1])).unsqueeze(2),
-		# 			deltaB_u[:, 1:, 1:]), dim=2)
-		# 		),
-		# 	dim=1).view(b, self.ng * self.warp, d_in, n)
+			deltaB_u = torch.cat(
+				(deltaB_u[:, :1],
+				torch.cat(
+					((deltaB_u[:, 1:, 0] + (deltaA[:, self.ngs[1:]] * latent[:, :-1])).unsqueeze(2),
+					deltaB_u[:, 1:, 1:]), dim=2)
+				),
+			dim=1).view(b, self.ng * self.warp, d_in, n)
 
 
 		latent = pscan2(deltaA, deltaB_u)
@@ -280,11 +280,10 @@ class MambaBlock(nn.Module):
 		# 	dim=(-1, -2)).real
 		# )
 		# return (y, None)
-		print(latent.view(b, self.ng, self.warp, d_in, n)[:, :, -1].shape)
 		return (y,
 			self.second_mixing(
 				latent.view(b, self.ng, self.warp, d_in, n)[:, :, -1].view(b, -1, d_in * n).to(torch.bfloat16)
-			)
+			).view(b, self.ng, d_in, n)
 		)
 
 class Block(nn.Module):
