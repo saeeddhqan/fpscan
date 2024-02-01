@@ -140,10 +140,7 @@ class LongConvModel(nn.Module):
 
 	def __init__(
 		self,
-		d_input,
-		d_output=10,
 		d_model=256,
-		n_layers=6,
 		dropout=0.1,
 		prenorm=False,
 		**conv_kwargs,
@@ -152,17 +149,14 @@ class LongConvModel(nn.Module):
 
 		self.flashfftconv = FlashFFTConv(config.block_size * 2, dtype=torch.bfloat16)
 
-		self.layer = LongConv(d_model, L=config.block_size, dropout=dropout, **conv_kwargs)
+		self.layer = LongConv(config.dim, L=config.block_size, dropout=dropout, **conv_kwargs)
 		self.layer.flashfftconv = self.flashfftconv
 
-		self.decoder = nn.Linear(d_model, d_output)
 
 	def forward(self, x):
 		x_type = x.dtype
 		x = x.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
-		z = self.layer(x)
-		x = z + x
-		x = x.transpose(-1, -2)
+		x = (self.layer(x) + x).transpose(-1, -2)
 		return x
 
 
