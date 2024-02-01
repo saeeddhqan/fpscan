@@ -80,7 +80,7 @@ class MambaBlock(nn.Module):
 		self.D = nn.Parameter(torch.ones(self.d_in))
 
 		if config.group:
-			self.warp = config.warp_size
+			self.warp = config.warp
 			self.ng = config.ngroups
 			self.ngs = [x * self.warp for x in range(self.ng)]
 			self.hot_loop = self.group_block
