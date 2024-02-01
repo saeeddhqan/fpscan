@@ -191,7 +191,7 @@ class MambaBlock(nn.Module):
 			self.ng = config.ngroups
 			self.ngs = [x * self.warp for x in range(self.ng)]
 			self.hot_loop = self.group_block
-			self.second_mixing = LongConvModel(self.dim, d_model=self.dim)
+			self.second_mixing = LongConvModel(self.dim)
 		else:
 			self.hot_loop = self.vanilla_block_parallel
 
