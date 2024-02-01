@@ -131,5 +131,5 @@ class LongConvModel(nn.Module):
 
 
 model = LongConvModel(128).to('cuda')
-x = torch.rand(4, 2048, 128).to('cuda')
+x = torch.rand(4, 2048, 128).to('cuda').to(torch.bfloat16)
 print(model(x).shape)
