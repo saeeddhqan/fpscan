@@ -68,28 +68,49 @@ class LongConv(nn.Module):
 			kernel_dropout=0,
 	):
 		super().__init__()
-		self.H = H
-		self.L = L * 2
-		self.channels = channels
-		self.kernel_lam = kernel_lam
 
-		self.D = nn.Parameter(torch.randn(channels, self.H))
+
+	def forward(self, u):
+
+		return y
+
+class LongConvModel(nn.Module):
+
+	def __init__(
+		self,
+		d_model=256,
+		dropout=0.1,
+		prenorm=False,
+		**conv_kwargs,
+	):
+		super().__init__()
+		self.H = d_model
+		self.L = config.ngroups * 2
+		self.channels = 1
+		self.kernel_lam = 0.1
+
+		self.D = nn.Parameter(torch.randn(self.channels, self.H))
 
 		self.output_linear = nn.Sequential(
 			nn.Linear(self.channels * self.H, 2 * self.H, bias=True),
 			nn.GLU(dim=-1),
 		)
 
-		self.kernel = torch.nn.Parameter(torch.randn(self.channels, self.H, self.L) * 0.002) #(c,H,L) 
+
+		self.flashfftconv = FlashFFTConv(self.L, dtype=torch.bfloat16)
 
 
-	def forward(self, u):
+
+	def forward(self, u, k):
+		u_type = u.dtype
+		u = u.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
+
 		L = u.size(-1)
-
-		k = self.kernel
 
 		# squash operator
 		k = F.relu(torch.abs(k) - self.kernel_lam) * torch.sign(k)
+		print(k.shape)
+		exit()
 		# use FFT to compute convolution
 		y = self.flashfftconv(u.contiguous(), k.squeeze(0))
 		y = y.unsqueeze(1)
@@ -107,30 +128,10 @@ class LongConv(nn.Module):
 		y = self.output_linear(y)
 		y = y.transpose(-1, -2)
 
-		return y
-
-class LongConvModel(nn.Module):
-
-	def __init__(
-		self,
-		d_model=256,
-		dropout=0.1,
-		prenorm=False,
-		**conv_kwargs,
-	):
-		super().__init__()
-
-		self.flashfftconv = FlashFFTConv(config.ngroups * 2, dtype=torch.bfloat16)
-
-		self.layer = LongConv(d_model, L=config.ngroups, dropout=dropout, **conv_kwargs)
-		self.layer.flashfftconv = self.flashfftconv
 
 
-	def forward(self, x):
-		x_type = x.dtype
-		x = x.transpose(-1, -2)  # (B, L, d_model) -> (B, d_model, L)
-		x = (self.layer(x) + x).transpose(-1, -2)
-		return x
+		u = (self.layer(u) + u).transpose(-1, -2)
+		return u
 
 
 class MambaBlock(nn.Module):
@@ -160,11 +161,14 @@ class MambaBlock(nn.Module):
 		self.D = nn.Parameter(torch.ones(self.d_in))
 
 		if config.group:
+			self.kernel = torch.nn.Parameter(
+				torch.randn(1, self.d_in * self.d_state, config.ngroups * 2) * 0.002) #(c, H, L) 
+
 			self.warp = config.warp
 			self.ng = config.ngroups
 			self.ngs = [x * self.warp for x in range(self.ng)]
 			self.hot_loop = self.group_block
-			self.second_mixing = LongConvModel(self.d_in * self.d_state)
+			# self.second_mixing = LongConvModel()
 		else:
 			self.hot_loop = self.vanilla_block_parallel
 
@@ -192,27 +196,6 @@ class MambaBlock(nn.Module):
 		return self.out_proj(y), latent
 
 
-	def vanilla_block_seq(self, u, delta, A, B, C, D, latent=None):
-		b, l, d_in = u.shape
-		n = A.shape[1]
-
-		deltaA = torch.exp(einsum(delta, A, 'b l d_in, d_in n -> b l d_in n'))
-		deltaB_u = einsum(delta, B, u, 'b l d_in, b l n, b l d_in -> b l d_in n')
-
-		x = torch.zeros((b, d_in, n), device=deltaA.device)
-		ys = []
-		for i in range(l):
-			x = deltaA[:, i] * x + deltaB_u[:, i]
-			y = einsum(x, C[:, i, :], 'b d_in n, b n -> b d_in')
-			ys.append(y)
-
-		y = torch.stack(ys, dim=1)
-		
-		y = y + u * D
-
-		return y, None
-
-
 	def vanilla_block_parallel(self, u, delta, A, B, C, D, latent=None):
 		deltaA = torch.exp(einsum(delta, A, 'b l d_in, d_in n -> b l d_in n'))
 		deltaB_u = einsum(delta, B, u, 'b l d_in, b l n, b l d_in -> b l d_in n')
@@ -231,17 +214,20 @@ class MambaBlock(nn.Module):
 		deltaA = torch.exp(einsum(delta, A, 'b l d_in, d_in n -> b l d_in n'))
 		deltaB_u = einsum(delta, B, u, 'b l d_in, b l n, b l d_in -> b l d_in n')
 
-		if self.idx > 0:
-			deltaB_u = deltaB_u.view(b, self.ng, self.warp, d_in, n)
+		# if self.idx > 0:
+		# 	deltaB_u = deltaB_u.view(b, self.ng, self.warp, d_in, n)
 
-			deltaB_u = torch.cat(
-				(deltaB_u[:, :1],
-				torch.cat(
-					((deltaB_u[:, 1:, 0] + (deltaA[:, self.ngs[1:]] * latent[:, :-1])).unsqueeze(2),
-					deltaB_u[:, 1:, 1:]), dim=2)
-				),
-			dim=1).view(b, self.ng * self.warp, d_in, n)
-
+		# 	deltaB_u = torch.cat(
+		# 		(deltaB_u[:, :1],
+		# 		torch.cat(
+		# 			((deltaB_u[:, 1:, 0] + (deltaA[:, self.ngs[1:]] * latent[:, :-1])).unsqueeze(2),
+		# 			deltaB_u[:, 1:, 1:]), dim=2)
+		# 		),
+		# 	dim=1).view(b, self.ng * self.warp, d_in, n)
+		print(deltaA.view(b, l, -1).shape)
+		print(deltaB_u.view(b, l, -1).shape)
+		print(self.kernel.shape)
+		exit()
 
 		latent = pscan2(deltaA, deltaB_u)
 
