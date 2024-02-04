@@ -11,14 +11,15 @@ def set_seed(seed: int):
 
 set_seed(1244)
 
+
 class PScan(torch.autograd.Function):
 	@staticmethod
 	def expand_(A, X):
 		if A.size(2) > 4:
-			B, G = A.shape[:2]
-			T = 2 * (A.size(2) // 2)
-			Aa = A[:, :, :T].view(B, G, T // 2, 2, -1, 1)
-			Xa = X[:, :, :T].view(B, G, T // 2, 2, -1, X.size(-1))
+			B, G, T, D, d_in = A.shape
+			T = 2 * (T // 2)
+			Aa = A[:, :, :T].view(B, G, T // 2, 2, D, d_in)
+			Xa = X[:, :, :T].view(B, G, T // 2, 2, D, d_in)
 			Xa[:, :, :, 1].add_(Aa[:, :, :, 1].mul(Xa[:, :, :, 0]))
 			Aa[:, :, :, 1].mul_(Aa[:, :, :, 0])
 			PScan.expand_(Aa[:, :, :, 1], Xa[:, :, :, 1])
@@ -43,13 +44,15 @@ class PScan(torch.autograd.Function):
 			X[:, :, 3].add_(A[:, :, 3].mul(X[:, :, 2]))
 			A[:, :, 3].mul_(A[:, :, 2])
 
+
 	@staticmethod
 	def acc_rev_(A, X):
 		if A.size(2) > 4:
-			B, G = A.shape[:2]
+			B, G, T, D, d_in = A.shape
 			T = 2 * (X.size(2) // 2)
-			Aa = A[:, :, -T:].view(B, G, T // 2, 2, -1, 1)
-			Xa = X[:, :, -T:].view(B, G, T // 2, 2, -1, X.size(-1))
+			Aa = A[:, :, -T:].view(B, G, T // 2, 2, D, d_in)
+			Xa = X[:, :, -T:].view(B, G, T // 2, 2, D, d_in)
+
 			Xa[:, :, :, 0].add_(Aa[:, :, :, 1].mul(Xa[:, :, :, 1]))
 			B = Aa[:, :, :, 0].clone()
 			B[:, :, 1:].mul_(Aa[:, :, :-1, 1])
@@ -67,27 +70,86 @@ class PScan(torch.autograd.Function):
 			X[:, :, 1].add_(A[:, :, 2].mul(X[:, :, 2]))
 			X[:, :, 0].add_(A[:, :, 1].mul(X[:, :, 1]))
 
+
 	@staticmethod
 	def forward(ctx, A, X, Y_init, G):
-		B, T = A.shape[:2]
-		D = X.size(-1)
-		ctx.A = A.view(B, G, T // G).unsqueeze(-1).clone()
-		ctx.Y_init = Y_init.unsqueeze(2).clone()
+		B, T, D, d_in = A.shape
+		ctx.A = A.view(B, G, T // G, D, d_in).clone()
+		ctx.Y_init = Y_init[:, :, None].clone()
 		ctx.A_star = ctx.A.clone()
-		ctx.X_star = X.view(B, G, T // G, D).clone()
-
+		ctx.X_star = X.view(B, G, T // G, D, d_in).clone()
 		PScan.expand_(ctx.A_star, ctx.X_star)
 		return ctx.A_star * ctx.Y_init + ctx.X_star
+
 
 	@staticmethod
 	def backward(ctx, grad_output):
 		U = grad_output * ctx.A_star
 		A = ctx.A.clone()
+		v = (A.size(0), -1, A.size(-2), A.size(-1))
 		R = grad_output.clone()
 		PScan.acc_rev_(A, R)
 		Q = ctx.Y_init.expand_as(ctx.X_star).clone()
-		Q[:, :, 1:].mul_(ctx.A_star[:, :-1]).add_(ctx.X_star[:, :, :-1])
-		return (Q * R).sum(-1), R, U.sum(dim=2)
+		Q[:, :, 1:].mul_(ctx.A_star[:, :, :-1]).add_(ctx.X_star[:, :, :-1])
+		return ((Q * R).view(v),
+				R.view(v),
+				U.sum(dim=2),
+				None)
 
 
 pscan = PScan.apply
+
+if __name__ == "__main__":
+	def test_correctness(x, y, atol=1e-1):
+		assert torch.allclose(x, y, atol=atol), 'Tensor mismatch'
+
+	def naive_pscan(A, X, Y_init, G=4):
+		offset = A.size(1) // G
+		groups = []
+
+		for g in range(G):
+			y = Y_init[:, g]
+			o = []
+			for k in range(offset):
+				y = A[:, (offset * g) + k] * y + X[:, (offset * g) + k]
+				o.append(y)
+			groups.append(torch.stack(o, dim=1))
+
+		groups = torch.stack(groups, dim=1).view(A.size(0), A.size(1), A.size(-2), A.size(-1))
+		return groups
+
+	def loss_function(o, target):
+		return torch.sum((o - target) ** 2)
+
+	B, T, D, d_in = 4, 128, 8, 2
+	G = 4
+	Ax = torch.randn(B, T, D, d_in, requires_grad=True)
+	Bx = torch.randn(B, T, D, d_in, requires_grad=True)
+	Y_init = torch.randn(B, G, D, d_in, requires_grad=True)
+	ref = naive_pscan(Ax, Bx, Y_init)
+	target = torch.randn_like(ref)
+
+	error = loss_function(ref, target)
+	error.backward()
+	ref_Ax_gradient = Ax.grad
+	ref_Bx_gradient = Bx.grad
+	ref_Y_init_gradient = Y_init.grad
+	Ax.grad = None
+	Bx.grad = None
+	Y_init.grad = None
+	
+	parallel = pscan(Ax, Bx, Y_init, G).view(B, T, D, d_in)
+
+	error = loss_function(parallel, target)
+	error.retain_grad()
+	error.backward()
+
+	test_correctness(ref, parallel, atol=1e-1)
+	print('passed: similar output')
+	test_correctness(ref_Ax_gradient, Ax.grad, atol=1e-1)
+	print('passed: similar Ax gradient')
+	test_correctness(ref_Bx_gradient, Bx.grad, atol=1e-1)
+	print('passed: similar Bx gradient')
+	test_correctness(ref_Y_init_gradient, Y_init.grad, atol=1e-1)
+	print('passed: similar Y_init gradient')
+	print('All passed')
