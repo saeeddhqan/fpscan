@@ -86,6 +86,8 @@ class PScan(torch.autograd.Function):
 	@staticmethod
 	def backward(ctx, grad_output):
 		U = grad_output * ctx.A_star
+		print(ctx.A_star.shape)
+		exit()
 		A = ctx.A.clone()
 		R = grad_output.clone()
 		PScan.acc_rev_(A, R)
@@ -98,7 +100,7 @@ pscan = PScan.apply
 
 if __name__ == "__main__":
 	def test_correctness(x, y, atol=1e-1):
-		assert torch.allclose(x, y, atol=atol), f"Expected {x} to equal {y}"
+		assert torch.allclose(x, y, atol=atol), 'Tensor mismatch'
 
 	def naive_pscan(A, X, Y_init):
 		y = Y_init
@@ -112,12 +114,12 @@ if __name__ == "__main__":
 	def loss_function(o, target):
 		return torch.sum((o - target) ** 2)
 
-	B, T, D, d_in = 4, 5, 2, 2
-	Ax = torch.randn(B, T, D, d_in, requires_grad=True)
-	Bx = torch.randn(B, T, D, d_in, requires_grad=True)
-	Y_init = torch.zeros(B, D, d_in, requires_grad=True)
+	B, T, D, d_in = 4, 32, 2, 2
+	Ax = torch.randn(B, T, D, d_in).to('cuda').requires_grad_()
+	Bx = torch.randn(B, T, D, d_in).to('cuda').requires_grad_()
+	Y_init = torch.zeros(B, D, d_in).to('cuda').requires_grad_()
 	ref = naive_pscan(Ax, Bx, Y_init)
-	target = torch.randn_like(ref)
+	target = torch.randn_like(ref).to('cuda')
 
 	error = loss_function(ref, target)
 	error.backward()
@@ -127,7 +129,7 @@ if __name__ == "__main__":
 	Ax.grad = None
 	Bx.grad = None
 	Y_init.grad = None
-	
+
 	parallel = pscan(Ax, Bx, Y_init)
 
 	error = loss_function(parallel, target)
