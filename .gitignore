@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# if you don't mind
+snippets.cpp
+
 # Distribution / packaging
 .Python
 build/

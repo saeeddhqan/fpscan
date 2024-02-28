@@ -14,7 +14,7 @@ def set_seed(seed: int):
 
 set_seed(1244)
 
-cuda_source = (Path(__file__).parent / 'csrc' / 'full_scan.cu').read_text()
+cuda_source = (Path(__file__).parent / 'csrc' / 'full_scan' / 'full_scan.cu').read_text()
 
 cpp_source = """
 at::Tensor warpscan_forward(const at::Tensor &gates, const at::Tensor &tokens, const at::Tensor &out, const bool reverse);
@@ -48,9 +48,6 @@ def scan_forward(gates, tokens, reverse=False):
 class PScan(torch.autograd.Function):
 	@staticmethod
 	def forward(ctx, A, X):
-		X = X.contiguous()
-		A = A.contiguous()
-
 		X = scan_forward(A, X)
 		ctx.save_for_backward(A, X)
 		return X
