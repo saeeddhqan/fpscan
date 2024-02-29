@@ -1,12 +1,13 @@
 
 import torch
 
-from scans import full_scan_cuda as full_cuda
-from scans import partial_scan_cuda_efficient as partial_cuda
+from scans import full_scan
+from scans import contraction_scan
 
 import random, math, numpy, time, sys
 import matplotlib.pyplot as plt
 from prettytable import PrettyTable
+
 
 def set_seed(seed: int):
 	random.seed(seed)
@@ -17,10 +18,6 @@ def set_seed(seed: int):
 
 
 set_seed(1244)
-
-
-def test_correctness(x, y, atol=1e-1):
-	assert torch.allclose(x, y, atol=atol), f"Expected {x} to equal {y}"
 
 
 def plot_vs(x, y1_mean, y2_mean):
@@ -36,17 +33,18 @@ def plot_vs(x, y1_mean, y2_mean):
 
 if __name__ == "__main__":
 
-	B, T, D = 32, 256, 2
+	B, T, D = 4, 256, 2
 	d_in = 1
 	steps = 150
 	vanilla = False
-	g_params = {64: 1, 1024: 16, 2048: 32, 4096: 32, 8192: 64, 16384: 128, 32768: 256, 65536: 512}
-	# slen = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
+	# g_params = {64: 1, 1024: 16, 2048: 32, 4096: 32, 8192: 64, 16384: 128, 32768: 256, 65536: 512}
+	g_params = {64: 2, 128: 4, 256: 8, 512: 16, 1024: 16, 2048: 32, 4096: 32, 8192: 64, 16384: 128, 32768: 256, 65536: 512}
+	slen = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 	# slen = [32, 64, 128, 256, 512, 1024, 2048, 4096]
-	slen = [32, 64, 128, 256, 512]
-	# slen = [1024, 2048, 4096]
+	# slen = [64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]
+	# slen = [4096]
 	# dlen =  [128*x for x in range(1, 17)]
-	dlen =  [256, 512]
+	dlen =  [8]
 
 	results = PrettyTable()
 	results.field_names = ['B', 'L', 'D', 'full scan cuda (ms)', 'contraction scan cuda (ms)', 'speedup']
@@ -55,9 +53,9 @@ if __name__ == "__main__":
 	lmean2 = []
 	speedups1 = []
 	for l, L in enumerate(slen):
-		G = L//32 if L not in g_params else g_params[L]
+		G = g_params[L]
 		pg = L // G
-		partial_cuda.PScan.idxs = [(x*pg) for x in range(G)]
+		# contraction_scan.PScan.idxs = [(x*pg) for x in range(G)]
 
 		tl_mean1 = torch.empty(len(dlen))
 		tl_mean2 = torch.empty(len(dlen))
@@ -67,26 +65,26 @@ if __name__ == "__main__":
 			timing3 = torch.empty(10)
 
 			for r in range(timing1.size(0)):
-				A = 0.99 + 0.01 * torch.rand(B, L, D * d_in).to('cuda')
-				X = torch.randn(B, L, D * d_in).to('cuda').mT.contiguous()
-				Wq = torch.randn(1, 1, D * d_in).to('cuda').mT.contiguous()
-				Wk = torch.randn(1, 1, D * d_in).to('cuda').mT.contiguous()
-				Bh = torch.randn(B, G, D * d_in).to('cuda').mT.contiguous()
+				A = 0.99 + 0.01 * torch.rand(B, L, D * d_in).mT.contiguous().to('cuda')
+				# A = torch.ones(B, L, D * d_in).mT.contiguous().to('cuda')
+				X = torch.randn(B, L, D * d_in).mT.contiguous().to('cuda')
+				Wq = torch.randn(1, 1, D * d_in).mT.contiguous().to('cuda')
+				Wk = torch.randn(1, 1, D * d_in).mT.contiguous().to('cuda')
+				Bh = torch.randn(B, G, D * d_in).mT.contiguous().to('cuda')
 				# warmup
-				full_cuda.pscan(A, X)
-				partial_cuda.pscan(A, X, Bh, Wq, Wk)
+				full_scan.pscan(A, X)
+				contraction_scan.pscan(A, X, Bh, Wq, Wk)
 
 				# Evaluating the simple method
 				start_time = time.perf_counter()
 				for _ in range(steps):
-					full_cuda.pscan(A, X)
+					full_scan.pscan(A, X)
 				timing2[r] = time.perf_counter() - start_time
-
+	
 				# Evaluating the contraction method
 				start_time = time.perf_counter()
 				for _ in range(steps):
-					partial_cuda.pscan(A, X, Bh, Wq, Wk)
-					# partial_cuda.pscan(A.mT.contiguous(), X.mT.contiguous())
+					contraction_scan.pscan(A, X, Bh, Wq, Wk)
 				timing1[r] = time.perf_counter() - start_time
 
 
