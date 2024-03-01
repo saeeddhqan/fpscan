@@ -8,104 +8,76 @@ We use the current value to make q, and k.
 #include "shared.h"
 
 
+template <typename tens>
+__device__ void scan_kernel_small_4t_4096_load(
+	const tens *__restrict__ Ax,
+	const tens *__restrict__ Bx,
+	tens* partial_a,
+	tens* partial_b,
+	const uint tx,
+	uint offset
+){
+	partial_a[0] = tx == 0 ? (tens) 1.0 : Ax[offset];
+	partial_b[0] = Bx[offset];
+
+	offset++;
+	tens gate = Ax[offset];
+	partial_a[1] = partial_a[0] * gate;
+	partial_b[1] = partial_b[0] * gate + Bx[offset];
+
+	offset++;
+	gate = Ax[offset];
+	partial_a[2] = partial_a[1] * gate;
+	partial_b[2] = partial_b[1] * gate + Bx[offset];
+
+	offset++;
+	gate = Ax[offset];
+	partial_a[3] = partial_a[2] * gate;
+	partial_b[3] = partial_b[2] * gate + Bx[offset];
+}
 
 
-// template <typename tens>
-// __global__  void scan_kernel_small_4t_4096(
-// 	const tens *__restrict__ Ax,
-// 	tens *__restrict__ Bx,
-// 	const tens *__restrict__ Bh,
-// 	const tens *__restrict__ Wq,
-// 	const tens *__restrict__ Wk,
-// 	uint batch_stride, uint dim_stride
-// ) {
-// 	const uint warps_per_block = 32;
-// 	const int bh_batch_stride = warps_per_block * gridDim.y;
+template <typename tens>
+__global__  void scan_kernel_small_4t_4096(
+	const tens *__restrict__ Ax,
+	tens *__restrict__ Bx,
+	const tens *__restrict__ Bh,
+	const tens *__restrict__ Wq,
+	const tens *__restrict__ Wk,
+	uint batch_stride, uint dim_stride
+) {
+	uint offset = (blockIdx.x * batch_stride + blockIdx.y * dim_stride) + threadIdx.x * 4;
+	const uint lane_id = threadIdx.x & 31;
+	tens partial_a[4];
+	tens partial_b[4];
 
-// 	__shared__ tens warp_q[warps_per_block];
-// 	__shared__ tens warp_k[warps_per_block];
-// 	__shared__ tens warp_v[warps_per_block];
-// 	__shared__ tens warp_r[warps_per_block];
+	scan_kernel_small_4t_4096_load(Ax, Bx, partial_a, partial_b, threadIdx.x, offset);
 
-// 	uint offset = (blockIdx.x * batch_stride + blockIdx.y * dim_stride) + threadIdx.x * 4;
-// 	const uint warp_id = threadIdx.x >> 5;
-// 	const uint lane_id = threadIdx.x & 31;
-// 	const uint bh_offset = blockIdx.x * bh_batch_stride + blockIdx.y * warps_per_block + warp_id;
+	#pragma unroll
+	for (int delta = 1; delta < 32; delta *= 2) {
+		tens prev_gate = __shfl_up_sync(0xffffffff, partial_a[3], delta);
+		tens prev_token = __shfl_up_sync(0xffffffff, partial_b[3], delta);
 
-// 	tens partial_a[4];
-// 	tens partial_b[4];
+		if (lane_id >= delta) {
+			partial_b[0] = prev_token * partial_a[0] + partial_b[0];
+			partial_a[0] = prev_gate * partial_a[0];
 
-// 	partial_a[0] = threadIdx.x == 0 ? (tens) 1.0 : Ax[offset];
-// 	partial_b[0] = Bx[offset];
+			partial_b[1] = prev_token * partial_a[1] + partial_b[1];
+			partial_a[1] = prev_gate * partial_a[1];
 
-// 	tens gate = Ax[offset + 1];
-// 	partial_a[1] = partial_a[0] * gate;
-// 	partial_b[1] = partial_b[0] * gate + Bx[offset + 1];
+			partial_b[2] = prev_token * partial_a[2] + partial_b[2];
+			partial_a[2] = prev_gate * partial_a[2];
 
-// 	gate = Ax[offset + 2];
-// 	partial_a[2] = partial_a[1] * gate;
-// 	partial_b[2] = partial_b[1] * gate + Bx[offset + 2];
+			partial_b[3] = prev_token * partial_a[3] + partial_b[3];
+			partial_a[3] = prev_gate * partial_a[3];
+		}
+	}
 
-// 	gate = Ax[offset + 3];
-// 	partial_a[3] = partial_a[2] * gate;
-// 	partial_b[3] = partial_b[2] * gate + Bx[offset + 3];
-
-// 	#pragma unroll
-// 	for (int delta = 1; delta < 32; delta *= 2) {
-// 		tens prev_gate = __shfl_up_sync(0xffffffff, partial_a[3], delta);
-// 		tens prev_token = __shfl_up_sync(0xffffffff, partial_b[3], delta);
-
-// 		if (lane_id >= delta) {
-// 			partial_b[0] = prev_token * partial_a[0] + partial_b[0];
-// 			partial_a[0] = prev_gate * partial_a[0];
-// 			partial_b[1] = prev_token * partial_a[1] + partial_b[1];
-// 			partial_a[1] = prev_gate * partial_a[1];
-// 			partial_b[2] = prev_token * partial_a[2] + partial_b[2];
-// 			partial_a[2] = prev_gate * partial_a[2];
-// 			partial_b[3] = prev_token * partial_a[3] + partial_b[3];
-// 			partial_a[3] = prev_gate * partial_a[3];
-// 		}
-// 	}
-
-// 	__syncwarp();
-
-// 	if (lane_id == 31 && warp_id < warps_per_block - 1) {
-// 		warp_k[warp_id] = Bh[bh_offset];
-// 		warp_k[warp_id] = Wk[blockIdx.y] * warp_k[warp_id] + warp_k[warp_id];
-// 		warp_v[warp_id] = partial_b[3];
-// 		warp_q[warp_id] = Wq[blockIdx.y] * warp_v[warp_id] + warp_v[warp_id];
-// 		warp_r[warp_id] = warp_v[warp_id];
-// 	}
-
-// 	__syncthreads();
-
-// 	if (lane_id == 31 && warp_id && warp_id < warps_per_block - 1) {
-// 		tens score = -1e10;
-// 		uint bid;
-// 		#pragma unroll
-// 		for (uint delta = 0; delta < warp_id; ++delta) {
-// 			tens tmp_score = warp_k[delta] * warp_q[warp_id];
-// 			if (tmp_score > score) {
-// 				score = tmp_score;
-// 				bid = delta;
-// 			}
-// 		}
-// 		warp_r[warp_id] = score * warp_v[bid] + warp_v[warp_id];
-// 	}
-// 	__syncthreads();
-
-// 	if (warp_id > 0) {
-// 		Bx[offset] = partial_b[0] + warp_r[warp_id - 1];
-// 		Bx[offset + 1] = partial_b[1] + warp_r[warp_id - 1];
-// 		Bx[offset + 2] = partial_b[2] + warp_r[warp_id - 1];
-// 		Bx[offset + 3] = partial_b[3] + warp_r[warp_id - 1];
-// 	} else {
-// 		// Bx[offset] = partial_b[0];
-// 		// Bx[offset + 1] = partial_b[1];
-// 	// 	Bx[offset + 2] = partial_b[2];
-// 	// 	Bx[offset + 3] = partial_b[3];
-// 	}
-// }
+	Bx[offset] = partial_b[0];
+	Bx[offset + 1] = partial_b[1];
+	Bx[offset + 2] = partial_b[2];
+	Bx[offset + 3] = partial_b[3];
+}
 
 
 template <typename tens, uint chunks_per_seq>
@@ -228,7 +200,7 @@ __global__  void scan_kernel_large_4t_32wpb(
 
 
 
-template <typename tens, uint warps_per_block>
+template <typename tens>
 __global__  void scan_kernel_small_2t(
 	const tens *__restrict__ Ax,
 	tens *__restrict__ Bx,
@@ -237,19 +209,8 @@ __global__  void scan_kernel_small_2t(
 	const tens *__restrict__ Wk,
 	uint batch_stride, uint dim_stride
 ) {
-
-	const int bh_batch_stride = warps_per_block * gridDim.y;
-
-	__shared__ tens warp_q[warps_per_block];
-	__shared__ tens warp_k[warps_per_block];
-	__shared__ tens warp_v[warps_per_block];
-	__shared__ tens warp_r[warps_per_block];
-
 	uint offset = (blockIdx.x * batch_stride + blockIdx.y * dim_stride) + threadIdx.x * 2;
-	const uint warp_id = threadIdx.x >> 5;
 	const uint lane_id = threadIdx.x & 31;
-	const uint bh_offset = blockIdx.x * bh_batch_stride + blockIdx.y * warps_per_block + warp_id;
-
 	tens partial_a[2];
 	tens partial_b[2];
 
@@ -258,13 +219,15 @@ __global__  void scan_kernel_small_2t(
 	tens gate = Ax[offset + 1];
 	partial_a[1] = partial_a[0] * gate;
 	partial_b[1] = partial_b[0] * gate + Bx[offset + 1];
+	// scan_kernel_small_2t_load(Ax, Bx, partial_a, partial_b, threadIdx.x, offset);
 	
 	#pragma unroll
 	for (int delta = 1; delta < 32; delta *= 2) {
-		tens prev_gate = __shfl_up_sync(0xffffffff, partial_a[1], delta);
-		tens prev_token = __shfl_up_sync(0xffffffff, partial_b[1], delta);
+		tens prev_gate = __shfl_up_sync(0xffffffff, partial_a[1], delta); // hardcoded step_thread - 1
+		tens prev_token = __shfl_up_sync(0xffffffff, partial_b[1], delta); // hardcoded step_thread - 1
 
 		if (lane_id >= delta) {
+			// You are having two reads for Ax.
 			partial_b[0] = prev_token * partial_a[0] + partial_b[0];
 			partial_a[0] = prev_gate * partial_a[0];
 			partial_b[1] = prev_token * partial_a[1] + partial_b[1];
@@ -272,45 +235,13 @@ __global__  void scan_kernel_small_2t(
 		}
 	}
 
-	__syncwarp();
-
-	if (lane_id == 31 && warp_id < warps_per_block - 1) {
-		warp_k[warp_id] = Bh[bh_offset];
-		warp_k[warp_id] = Wk[blockIdx.y] * warp_k[warp_id] + warp_k[warp_id];
-		warp_v[warp_id] = partial_b[1];
-		warp_q[warp_id] = Wq[blockIdx.y] * warp_v[warp_id] + warp_v[warp_id];
-		warp_r[warp_id] = warp_v[warp_id];
-	}
-
-	__syncthreads();
-
-	if (lane_id == 31 && warp_id && warp_id < warps_per_block - 1) {
-		tens score = -1e10;
-		uint bid;
-		#pragma unroll
-		for (uint delta = 0; delta < warp_id; ++delta) {
-			tens tmp_score = warp_k[delta] * warp_q[warp_id];
-			if (tmp_score > score) {
-				score = tmp_score;
-				bid = delta;
-			}
-		}
-		warp_r[warp_id] = score * warp_v[bid] + warp_v[warp_id];
-	}
-	__syncthreads();
-
-	if (warp_id > 0) {
-		Bx[offset] = partial_b[0] + warp_r[warp_id - 1];
-		Bx[offset + 1] = partial_b[1] + warp_r[warp_id - 1];
-	} else {
-		Bx[offset] = partial_b[0];
-		Bx[offset + 1] = partial_b[1];
-	}
+	Bx[offset] = partial_b[0];
+	Bx[offset + 1] = partial_b[1];
 }
 
 
 
-template<typename tens, uint warps_per_block>
+template<typename tens>
 __global__ void scan_kernel_small_1t(
 	const tens *__restrict__ Ax,
 	tens *__restrict__ Bx,
@@ -320,18 +251,8 @@ __global__ void scan_kernel_small_1t(
 	uint batch_stride, uint dim_stride
 	)
 {
-	const int bh_batch_stride = warps_per_block * gridDim.y;
-
-	__shared__ tens warp_q[warps_per_block];
-	__shared__ tens warp_k[warps_per_block];
-	__shared__ tens warp_v[warps_per_block];
-	__shared__ tens warp_r[warps_per_block];
-
-
 	const uint offset = (blockIdx.x * batch_stride + blockIdx.y * dim_stride) + threadIdx.x;
-	const uint warp_id = threadIdx.x >> 5; // x / 32
-	const uint lane_id = threadIdx.x & 31; // x % 32
-	const uint bh_offset = blockIdx.x * bh_batch_stride + blockIdx.y * warps_per_block + warp_id;
+	const uint lane_id = threadIdx.x & 31;
 	tens partial_a = threadIdx.x == 0 ? (tens) 1.0 : Ax[offset];
 	tens partial_b = Bx[offset];
 
@@ -346,39 +267,7 @@ __global__ void scan_kernel_small_1t(
 		}
 	}
 
-	__syncwarp();
-
-	if (lane_id == 31 && warp_id < warps_per_block - 1) {
-		warp_k[warp_id] = Bh[bh_offset];
-		warp_k[warp_id] = Wk[blockIdx.y] * warp_k[warp_id] + warp_k[warp_id];
-		warp_v[warp_id] = partial_b;
-		warp_q[warp_id] = Wq[blockIdx.y] * warp_v[warp_id] + warp_v[warp_id];
-		warp_r[warp_id] = warp_v[warp_id];
-	}
-
-	__syncthreads();
-
-	if (lane_id == 31 && warp_id && warp_id < warps_per_block - 1) {
-		tens score = -1e10;
-		uint bid;
-		#pragma unroll
-		for (uint delta = 0; delta < warp_id; ++delta) {
-			tens tmp_score = warp_k[delta] * warp_q[warp_id];
-			if (tmp_score > score) {
-				score = tmp_score;
-				bid = delta;
-			}
-		}
-		warp_r[warp_id] = score * warp_v[bid] + warp_v[warp_id];
-	}
-
-	__syncthreads();
-
-	if (warp_id > 0) {
-		Bx[offset] = partial_b + warp_r[warp_id - 1];
-	} else {
-		Bx[offset] = partial_b;
-	}
+	Bx[offset] = partial_b; // think about it!
 }
 
 
@@ -400,12 +289,14 @@ void dimwise_pscan(
 	const uint seqlen = sizes[2];
 
 	dim3 grid(batch_size, dim);
-
-	if (seqlen == 64) {
+	// torch::Tensor out = torch::empty({batch_size, dim, seqlen}, Bx.options());
+	printf("hi:%ld\n", Bh.strides()[0]);
+	printf("hi:%ld\n", Bh.strides()[1]);
+	if(seqlen == 32) {
 		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
 			"dimwise scan",
 			([&]
-				{ scan_kernel_small_1t<input_t, 2><<<grid, 64>>>(
+				{ scan_kernel_small_1t<input_t><<<grid, 32>>>(
 						static_cast<input_t *>(Ax.data_ptr()),
 						static_cast<input_t *>(Bx.data_ptr()),
 						static_cast<input_t *>(Bh.data_ptr()),
@@ -413,7 +304,23 @@ void dimwise_pscan(
 						static_cast<input_t *>(Wk.data_ptr()),
 						// static_cast<input_t *>(out.data_ptr()),
 						batch_stride, dim_stride
-					); 
+						); 
+				}
+			)
+		);
+	} else if (seqlen == 64) {
+		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
+			"dimwise scan",
+			([&]
+				{ scan_kernel_small_1t<input_t><<<grid, 64>>>(
+						static_cast<input_t *>(Ax.data_ptr()),
+						static_cast<input_t *>(Bx.data_ptr()),
+						static_cast<input_t *>(Bh.data_ptr()),
+						static_cast<input_t *>(Wq.data_ptr()),
+						static_cast<input_t *>(Wk.data_ptr()),
+						// static_cast<input_t *>(out.data_ptr()),
+						batch_stride, dim_stride
+						); 
 				}
 			)
 		);
@@ -421,7 +328,7 @@ void dimwise_pscan(
 		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
 			"dimwise scan",
 			([&]
-				{ scan_kernel_small_1t<input_t, 4><<<grid, 128>>>(
+				{ scan_kernel_small_1t<input_t><<<grid, 128>>>(
 						static_cast<input_t *>(Ax.data_ptr()),
 						static_cast<input_t *>(Bx.data_ptr()),
 						static_cast<input_t *>(Bh.data_ptr()),
@@ -429,7 +336,7 @@ void dimwise_pscan(
 						static_cast<input_t *>(Wk.data_ptr()),
 						// static_cast<input_t *>(out.data_ptr()),
 						batch_stride, dim_stride
-					);
+						);
 				}
 			)
 		);
@@ -437,7 +344,7 @@ void dimwise_pscan(
 		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
 			"dimwise scan",
 			([&]
-				{ scan_kernel_small_1t<input_t, 8><<<grid, 256>>>(
+				{ scan_kernel_small_1t<input_t><<<grid, 256>>>(
 						static_cast<input_t *>(Ax.data_ptr()),
 						static_cast<input_t *>(Bx.data_ptr()),
 						static_cast<input_t *>(Bh.data_ptr()),
@@ -445,7 +352,7 @@ void dimwise_pscan(
 						static_cast<input_t *>(Wk.data_ptr()),
 						// static_cast<input_t *>(out.data_ptr()),
 						batch_stride, dim_stride
-					);
+						);
 				}
 			)
 		);
@@ -453,7 +360,7 @@ void dimwise_pscan(
 		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
 			"dimwise scan",
 			([&]
-				{ scan_kernel_small_1t<input_t, 16><<<grid, 512>>>(
+				{ scan_kernel_small_1t<input_t><<<grid, 512>>>(
 						static_cast<input_t *>(Ax.data_ptr()),
 						static_cast<input_t *>(Bx.data_ptr()),
 						static_cast<input_t *>(Bh.data_ptr()),
@@ -461,7 +368,7 @@ void dimwise_pscan(
 						static_cast<input_t *>(Wk.data_ptr()),
 						// static_cast<input_t *>(out.data_ptr()),
 						batch_stride, dim_stride
-					);
+						);
 				}
 			)
 		);
@@ -469,7 +376,7 @@ void dimwise_pscan(
 		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
 			"dimwise scan",
 			([&]
-				{ scan_kernel_small_2t<input_t, 16><<<grid, 512>>>(
+				{ scan_kernel_small_2t<input_t><<<grid, 512>>>(
 						static_cast<input_t *>(Ax.data_ptr()),
 						static_cast<input_t *>(Bx.data_ptr()),
 						static_cast<input_t *>(Bh.data_ptr()),
@@ -477,7 +384,7 @@ void dimwise_pscan(
 						static_cast<input_t *>(Wk.data_ptr()),
 						// static_cast<input_t *>(out.data_ptr()),
 						batch_stride, dim_stride
-					);
+						);
 				}
 			)
 		);
@@ -485,7 +392,7 @@ void dimwise_pscan(
 		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
 			"dimwise scan",
 			([&]
-				{ scan_kernel_small_2t<input_t, 32><<<grid, 1024>>>(
+				{ scan_kernel_small_2t<input_t><<<grid, 1024>>>(
 						static_cast<input_t *>(Ax.data_ptr()),
 						static_cast<input_t *>(Bx.data_ptr()),
 						static_cast<input_t *>(Bh.data_ptr()),
@@ -493,7 +400,7 @@ void dimwise_pscan(
 						static_cast<input_t *>(Wk.data_ptr()),
 						// static_cast<input_t *>(out.data_ptr()),
 						batch_stride, dim_stride
-					);
+						);
 				}
 			)
 		);
@@ -501,7 +408,7 @@ void dimwise_pscan(
 		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
 			"dimwise scan",
 			([&]
-				{ scan_kernel_large_4t_32wpb<input_t, 1><<<grid, 1024>>>(
+				{ scan_kernel_small_4t_4096<input_t><<<grid, 1024>>>(
 						static_cast<input_t *>(Ax.data_ptr()),
 						static_cast<input_t *>(Bx.data_ptr()),
 						static_cast<input_t *>(Bh.data_ptr()),
@@ -509,71 +416,7 @@ void dimwise_pscan(
 						static_cast<input_t *>(Wk.data_ptr()),
 						// static_cast<input_t *>(out.data_ptr()),
 						batch_stride, dim_stride
-					);
-				}
-			)
-		);
-	} else if (seqlen == 8192) {
-		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
-			"dimwise scan",
-			([&]
-				{ scan_kernel_large_4t_32wpb<input_t, 2><<<grid, 1024>>>(
-						static_cast<input_t *>(Ax.data_ptr()),
-						static_cast<input_t *>(Bx.data_ptr()),
-						static_cast<input_t *>(Bh.data_ptr()),
-						static_cast<input_t *>(Wq.data_ptr()),
-						static_cast<input_t *>(Wk.data_ptr()),
-						// static_cast<input_t *>(out.data_ptr()),
-						batch_stride, dim_stride
-					);
-				}
-			)
-		);
-	} else if (seqlen == 16384) {
-		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
-			"dimwise scan",
-			([&]
-				{ scan_kernel_large_4t_32wpb<input_t, 4><<<grid, 1024>>>(
-						static_cast<input_t *>(Ax.data_ptr()),
-						static_cast<input_t *>(Bx.data_ptr()),
-						static_cast<input_t *>(Bh.data_ptr()),
-						static_cast<input_t *>(Wq.data_ptr()),
-						static_cast<input_t *>(Wk.data_ptr()),
-						// static_cast<input_t *>(out.data_ptr()),
-						batch_stride, dim_stride
-					);
-				}
-			)
-		);
-	} else if (seqlen == 32768) {
-		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
-			"dimwise scan",
-			([&]
-				{ scan_kernel_large_4t_32wpb<input_t, 8><<<grid, 1024>>>(
-						static_cast<input_t *>(Ax.data_ptr()),
-						static_cast<input_t *>(Bx.data_ptr()),
-						static_cast<input_t *>(Bh.data_ptr()),
-						static_cast<input_t *>(Wq.data_ptr()),
-						static_cast<input_t *>(Wk.data_ptr()),
-						// static_cast<input_t *>(out.data_ptr()),
-						batch_stride, dim_stride
-					);
-				}
-			)
-		);
-	} else if (seqlen == 65536) {
-		DISPATCH_FLOAT_AND_HALF_AND_BF16(Ax.scalar_type(), Bx.scalar_type(),
-			"dimwise scan",
-			([&]
-				{ scan_kernel_large_4t_32wpb<input_t, 16><<<grid, 1024>>>(
-						static_cast<input_t *>(Ax.data_ptr()),
-						static_cast<input_t *>(Bx.data_ptr()),
-						static_cast<input_t *>(Bh.data_ptr()),
-						static_cast<input_t *>(Wq.data_ptr()),
-						static_cast<input_t *>(Wk.data_ptr()),
-						// static_cast<input_t *>(out.data_ptr()),
-						batch_stride, dim_stride
-					);
+						);
 				}
 			)
 		);
