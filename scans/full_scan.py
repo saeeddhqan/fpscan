@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import torch
-from torch.utils.cpp_extension import load_inline
+from something_weird import fullscan_forward
 import random, math, numpy
 
 def set_seed(seed: int):
@@ -14,34 +14,10 @@ def set_seed(seed: int):
 
 set_seed(1244)
 
-cuda_source = (Path(__file__).parent / 'csrc' / 'full_scan' / 'full_scan.cu').read_text()
-
-cpp_source = """
-at::Tensor warpscan_forward(const at::Tensor &gates, const at::Tensor &tokens, const at::Tensor &out, const bool reverse);
-"""
-
-module = load_inline(
-	name='warpscan',
-	cpp_sources=[cpp_source],
-	cuda_sources=[cuda_source],
-	functions=['warpscan_forward'],
-	verbose=False,
-	extra_cuda_cflags=[
-		"-O3",
-		"-std=c++17",
-		"--ptxas-options=-v",
-		"-lineinfo",
-		"--fmad", "false",
-		"-U__CUDA_NO_HALF_OPERATORS__", "-U__CUDA_NO_HALF_CONVERSIONS__",
-		"-U__CUDA_NO_BFLOAT16_OPERATORS__", "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
-        '--use_fast_math',
-	]
-)
-warpscan_forward = module.warpscan_forward
 
 def scan_forward(gates, tokens, reverse=False):
 	output = torch.zeros_like(tokens)
-	warpscan_forward(gates, tokens, output, reverse)
+	fullscan_forward(gates, tokens, output, reverse)
 	return output
 
 
