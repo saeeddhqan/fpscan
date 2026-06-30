@@ -1,0 +1,78 @@
+lspci | grep -i nvidi
+
+apt-get purge nvidia* -y
+
+rm /etc/apt/sources.list.d/cuda*
+
+rm -r /etc/local/cuda*
+
+apt-get autoremove && apt-get autoclean -y
+
+apt-get update -y
+
+apt-get upgrade -y
+
+apt-get install g++ freeglut3-dev build-essential libx11-dev -y
+
+apt-get install libxmu-dev libxi-dev libglu1-mesa libglu1-mesa-dev -y
+
+add-apt-repository ppa:graphics-drivers/ppa -y
+
+apt-get install -y cuda-drivers
+
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+
+mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+
+wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
+
+dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
+
+cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-819B78CE-keyring.gpg /usr/share/keyrings/
+
+apt-get update -y
+
+apt-get -y install cuda-toolkit-12-3
+
+wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/
+
+dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
+
+cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
+
+apt-get update -y
+
+
+apt-get -y install cuda-toolkit-12-3
+
+𝚎𝚌𝚑𝚘 '𝚎𝚡𝚙𝚘𝚛𝚝 𝙿𝙰𝚃𝙷=/𝚞𝚜𝚛/𝚕𝚘𝚌𝚊𝚕/𝚌𝚞𝚍𝚊-𝟷𝟸.𝟹/𝚋𝚒𝚗:$𝙿𝙰𝚃𝙷' >> ~/.𝚋𝚊𝚜𝚑𝚛𝚌
+echo 'export PATH=/usr/local/cuda-12.3/bin:$PATH' >> ~/.bashrc
+
+𝚎𝚌𝚑𝚘 '𝚎𝚡𝚙𝚘𝚛𝚝 𝙻𝙳_𝙻𝙸𝙱𝚁𝙰𝚁𝚈_𝙿𝙰𝚃𝙷=/𝚞𝚜𝚛/𝚕𝚘𝚌𝚊𝚕/𝚌𝚞𝚍𝚊-𝟷𝟸.𝟹/𝚕𝚒𝚋𝟼𝟺:$𝙻𝙳_𝙻𝙸𝙱𝚁𝙰𝚁𝚈_𝙿𝙰𝚃𝙷' >> ~/.𝚋𝚊𝚜𝚑𝚛𝚌
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.3/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
+
+𝚜𝚘𝚞𝚛𝚌𝚎 ~/.𝚋𝚊𝚜𝚑𝚛𝚌
+source ~/.bashrc
+
+𝚕𝚍𝚌𝚘𝚗𝚏𝚒𝚐
+ldconfig
+
+𝚠𝚐𝚎𝚝 𝚑𝚝𝚝𝚙𝚜://𝚍𝚎𝚟𝚎𝚕𝚘𝚙𝚎𝚛.𝚗𝚟𝚒𝚍𝚒𝚊.𝚌𝚘𝚖/𝚌𝚘𝚖𝚙𝚞𝚝𝚎/𝚖𝚊𝚌𝚑𝚒𝚗𝚎-𝚕𝚎𝚊𝚛𝚗𝚒𝚗𝚐/𝚌𝚞𝚍𝚗𝚗/𝚜𝚎𝚌𝚞𝚛𝚎/𝟾.𝟸.𝟷.𝟹𝟸/𝟷𝟷.𝟹_𝟶𝟼𝟶𝟽𝟸𝟶𝟸𝟷/𝚌𝚞𝚍𝚗𝚗-𝟷𝟷.𝟹-𝚕𝚒𝚗𝚞𝚡-𝚡𝟼𝟺-𝚟𝟾.𝟸.𝟷.𝟹𝟸.𝚝𝚐𝚣
+wget https://developer.nvidia.com/compute/machine-learning/cudnn/secure/8.2.1.32/11.3_06072021/cudnn-11.3-linux-x64-v8.2.1.32.tgz
+
+𝚝𝚊𝚛 -𝚡𝚣𝚟𝚏 "𝚌𝚞𝚍𝚗𝚗-𝟷𝟷.𝟹-𝚕𝚒𝚗𝚞𝚡-𝚡𝟼𝟺-𝚟𝟾.𝟸.𝟷.𝟹𝟸.𝚝𝚐𝚣"
+tar -xzvf "cudnn-11.3-linux-x64-v8.2.1.32.rgz"
+
+𝚌𝚙 -𝙿 𝚌𝚞𝚍𝚊/𝚒𝚗𝚌𝚕𝚞𝚍𝚎/𝚌𝚞𝚍𝚗𝚗.𝚑 /𝚞𝚜𝚛/𝚕𝚘𝚌𝚊𝚕/𝚌𝚞𝚍𝚊-𝟷𝟸.𝟹/𝚒𝚗𝚌𝚕𝚞𝚍𝚎 
+cp -P cuda/include/cudnn.h /usr/local/cuda-12.3/include
+
+
+𝚌𝚙 -𝙿 𝚌𝚞𝚍𝚊/𝚕𝚒𝚋𝟼𝟺/𝚕𝚒𝚋𝚌𝚞𝚍𝚗𝚗* /𝚞𝚜𝚛/𝚕𝚘𝚌𝚊𝚕/𝚌𝚞𝚍𝚊-𝟷𝟸.𝟹/𝚕𝚒𝚋𝟼𝟺/
+cp -P cuda/lib64/libcudnn* /usr/local/cuda-12.3/lib64/
+
+𝚌𝚑𝚖𝚘𝚍 𝚊+𝚛 /𝚞𝚜𝚛/𝚕𝚘𝚌𝚊𝚕/𝚌𝚞𝚍𝚊-𝟷𝟸.𝟹/𝚕𝚒𝚋𝟼𝟺/𝚕𝚒𝚋𝚌𝚞𝚍𝚗𝚗*
+chmod a+r /usr/local/cuda-12.3/lib64/libcudnn*
+
+𝚊𝚙𝚝 𝚒𝚗𝚜𝚝𝚊𝚕𝚕 𝚗𝚟𝚝𝚘𝚙 -𝚢
+apt install nvtop -y
+

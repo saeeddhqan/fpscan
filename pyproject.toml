@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fpscan"
+version = "0.1.0"
+description = "An extremely fast first-order parallel scan for PyTorch (CUDA)."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Saeed Dehqan" }]
+keywords = ["pytorch", "cuda", "parallel-scan", "linear-recurrence", "ssm", "mamba"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+dependencies = ["torch"]
+
+[project.urls]
+Homepage = "https://github.com/saeeddhqan/fpscan"
+Repository = "https://github.com/saeeddhqan/fpscan"
+
+[project.optional-dependencies]
+bench = ["matplotlib", "prettytable", "numpy"]
+dev = ["pytest", "matplotlib", "prettytable", "numpy", "einops"]
+
+[tool.setuptools]
+packages = ["fpscan"]
+
+# cibuildwheel builds the prebuilt CUDA wheels that are attached to GitHub
+# Releases (see .github/workflows/release.yml). These wheels are NOT uploaded to
+# PyPI: only the sdist goes to PyPI, because a CUDA wheel is tied to a specific
+# torch + CUDA build that PyPI's wheel tags cannot express.
+[tool.cibuildwheel]
+# CPython only; adjust the range as new interpreters gain CUDA-image support.
+build = "cp39-* cp310-* cp311-* cp312-*"
+skip = "*-musllinux*"
+archs = ["x86_64"]
+# Use the torch installed by before-build instead of pip pulling a fresh one.
+build-frontend = { name = "pip", args = ["--no-build-isolation"] }
+# CI has no GPU, so there is nothing to run against; rely on the local suite.
+test-skip = "*"
+
+[tool.cibuildwheel.linux]
+# A manylinux image that ships the CUDA toolkit (nvcc). Pick the tag matching the
+# CUDA version these wheels should target. Community images, for example:
+#   https://hub.docker.com/r/sameli/manylinux2014_x86_64_cuda_12.4
+# Bump this (and the torch index URL below) together to retarget another CUDA.
+manylinux-x86_64-image = "sameli/manylinux2014_x86_64_cuda_12.4"
+# Install a CUDA-matched torch so the extension links against the right ABI.
+before-build = "pip install torch --index-url https://download.pytorch.org/whl/cu124"
+# No GPU at build time, so the target architectures must be baked in here.
+# Covers Volta through Hopper, plus PTX for forward compatibility.
+environment = { TORCH_CUDA_ARCH_LIST = "7.0;7.5;8.0;8.6;8.9;9.0+PTX", FORCE_CUDA = "1", MAX_JOBS = "2" }
+# Skip auditwheel: the wheel intentionally depends on the user's torch at
+# runtime and must not bundle libtorch/libcudart. Wheels keep a linux_x86_64
+# tag, which is fine for GitHub Releases (they are not uploaded to PyPI).
+repair-wheel-command = ""
