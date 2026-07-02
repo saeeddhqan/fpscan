@@ -67,13 +67,6 @@ Numbers depend on the GPU, dtype, batch, and dim, so run the benchmark on your
 own hardware to get figures for your setup.
 
 
-fpscan is faster at every sequence length, from about 6x at the shortest to
-about 62x at 65536, and stays under a millisecond out to 32768 tokens where the
-pure PyTorch baseline already takes tens of milliseconds. The GB/s column is the
-effective memory bandwidth of the scan, counting two reads and one write.
-Numbers depend on the GPU, dtype, batch, and dim, so run the benchmark on your
-own hardware to get figures for your setup.
-
 ## Usage
 
 Tensors are shaped `(batch, dim, seqlen)`, contiguous, on CUDA, and the scan
@@ -118,7 +111,7 @@ Constraints:
 
 ## Install from source
 
-The PyPI release is pending. Until then, install from source. The build compiles
+The build compiles
 a CUDA extension against your installed PyTorch, so install torch first and build
 with isolation disabled so the build can see it.
 
