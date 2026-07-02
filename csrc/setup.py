@@ -23,8 +23,8 @@ setup(
         'build_ext': BuildExtension
     },
     version='0.0.0',
-    description='Contraction parallel scan',
+    description='parallel scan',
     url='https://github.com/saeeddhqan/fpscan',
-    author='Saeed',
+    author='Saeed Dehqan',
     license='Apache 2.0',
 )
