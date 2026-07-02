@@ -11,7 +11,7 @@ over long sequences, the core primitive behind linear attention, state space
 models, and Mamba style sequence models. It is differentiable and runs in
 float32, float16, and bfloat16.
 
-**Up to 83x faster than a pure PyTorch parallel scan, and under one millisecond
+**Up to 112x faster than a pure PyTorch parallel scan, and under one millisecond
 for sequences up to 32768 tokens on an RTX 4060 Laptop GPU.**
 
 ## Install
@@ -46,25 +46,29 @@ fair parallel reference rather than a serial loop.
 
 | seqlen | fpscan p50 (ms) | torch parallel p50 (ms) | speedup | fpscan GB/s |
 |-------:|----------------:|------------------------:|--------:|------------:|
-| 32     | 0.0072          | 0.1385                  | 19.32x  | 27.4        |
-| 64     | 0.0072          | 0.1640                  | 22.87x  | 54.9        |
-| 128    | 0.0072          | 0.1906                  | 26.58x  | 109.7       |
-| 256    | 0.0073          | 0.2171                  | 29.82x  | 216.1       |
-| 512    | 0.0102          | 0.2437                  | 23.80x  | 307.2       |
-| 1024   | 0.0123          | 0.3656                  | 29.75x  | 512.0       |
-| 2048   | 0.0307          | 0.7240                  | 23.57x  | 409.6       |
-| 4096   | 0.0614          | 3.6864                  | 60.00x  | 409.6       |
-| 8192   | 0.2069          | 11.5171                 | 55.65x  | 243.2       |
-| 16384  | 0.4188          | 30.4671                 | 72.75x  | 240.4       |
-| 32768  | 0.8376          | 65.3169                 | 77.98x  | 240.4       |
-| 65536  | 1.6814          | 139.1119                | 82.74x  | 239.5       |
+| 32     | 0.0074          | 0.1412                  | 19.18x  | 26.7        |
+| 64     | 0.0079          | 0.1690                  | 21.29x  | 49.5        |
+| 128    | 0.0073          | 0.1978                  | 27.11x  | 107.8       |
+| 256    | 0.0081          | 0.2253                  | 27.88x  | 194.7       |
+| 512    | 0.0075          | 0.2479                  | 33.25x  | 421.9       |
+| 1024   | 0.0092          | 0.3656                  | 39.67x  | 682.7       |
+| 2048   | 0.0133          | 0.6932                  | 52.08x  | 945.2       |
+| 4096   | 0.0328          | 3.6864                  | 112.50x | 768.0       |
+| 8192   | 0.2008          | 11.5180                 | 57.37x  | 250.7       |
+| 16384  | 0.4362          | 30.4717                 | 69.85x  | 230.8       |
+| 32768  | 0.8612          | 65.3271                 | 75.86x  | 233.8       |
+| 65536  | 1.7050          | 139.1247                | 81.60x  | 236.2       |
 
 fpscan is faster at every sequence length, from about 19x at short sequences to
-about 83x at 65536, and stays under a millisecond out to 32768 tokens where the
-pure PyTorch baseline already takes tens of milliseconds. The GB/s column is the
-effective memory bandwidth of the scan, counting two reads and one write.
-Numbers depend on the GPU, dtype, batch, and dim, so run the benchmark on your
-own hardware to get figures for your setup.
+over 80x at 65536, and stays under a millisecond out to 32768 tokens where the
+pure PyTorch baseline already takes tens of milliseconds. The mid-range
+(512-4096) is where the kernel is fastest in absolute terms: vectorized loads
+plus L2 residency push effective bandwidth up to ~945 GB/s. Beyond 4096 the
+working set spills out of L2 and the scan becomes DRAM-bandwidth bound, running
+near the memory ceiling. The GB/s column is the effective memory bandwidth of
+the scan, counting two reads and one write. Numbers depend on the GPU, dtype,
+batch, and dim, so run the benchmark on your own hardware to get figures for
+your setup.
 
 
 ## Usage
@@ -172,10 +176,14 @@ not yet supported.
 ## How it works
 
 The kernel runs a three level hierarchical scan, one block per `(batch, dim)`
-pair. Each thread scans a few elements sequentially in registers, then warps
-combine their partial results with warp shuffles, then a leading warp combines
-the per warp totals, and the prefixes are pushed back down. Longer sequences are
-processed in chunks within the same block.
+pair. Each thread loads its elements with a single vectorized 128-bit access
+(`float4`, or the packed 64-bit equivalent for float16/bfloat16) and scans them
+sequentially in registers, then warps combine their partial results with warp
+shuffles, then a leading warp combines the per warp totals, and the prefixes are
+pushed back down. Longer sequences are processed in chunks within the same
+block. The scan always accumulates in float32, even for float16 and bfloat16
+inputs, so the narrow types keep full precision through the recurrence and only
+the loads and stores are narrow.
 
 ## License
 
