@@ -11,7 +11,7 @@ import torch
 __all__ = ["pscan", "scan_forward", "PScan"]
 
 
-_EXT_CANDIDATES = ("fpscan._C", "something_cool", "something_weird")
+_EXT_CANDIDATES = ("fpscan._C", "something_cool")
 
 _CSRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "csrc")
 _ext = None
